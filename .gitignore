@@ -42,3 +42,4 @@ testem.log
 Thumbs.db
 /.vs
 /.vscode
+/saltshaker-client-win32-x64/saltshaker-client.exe
