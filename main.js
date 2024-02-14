@@ -1,4 +1,4 @@
-const { app, BrowserWindow} = require('electron')
+const { app, BrowserWindow, Notification} = require('electron')
 const path = require('path');
 const {
 	SlpParser,
@@ -85,23 +85,39 @@ const {
 		console.log('Dolphin connection error', err);
 	});
 
+const showNotification = (title, body, duration) => {
+	const notification = new Notification({
+		title: title || 'Notification',
+		body: body || '',
+	});
+	
+	notification.show();
+
+	setTimeout(() => {
+		notification.close();
+		}, duration || 5000);
+	};
+
 let win;
 
 function createWindow () {
+  // Set the application name (visible in the menu bar)
+  app.name = 'Salt Shaker';
+
   // Create the browser window.
   win = new BrowserWindow({
     width: 800, 
     height: 800,
+	show: true,
     backgroundColor: '#ffffff',
-    icon: `file://${__dirname}/dist/assets/logo.png`,
+    icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
+	title: app.name,
     webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: true,
         contextIsolation: true 
-    }
-  })
-
-
+    },
+  });
 
   win.webContents.once('dom-ready', () => {
 			// Make the disconnected label appear first
@@ -122,7 +138,8 @@ function createWindow () {
 
 // Create window on electron initialization
 app.on('ready', function() {
-    createWindow()
+	showNotification('Ready to Connect','Enter your username to get verbally abused.')
+	createWindow()
 })
 
 // Quit when all windows are closed.
