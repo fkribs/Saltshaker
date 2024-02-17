@@ -128,8 +128,7 @@ function createWindow () {
 
 // Create window on electron initialization
 app.on('ready', function() {
-	showNotification('Ready to Connect','Enter your connect code to get verbally abused.');
-	showNotification('Ready to Connect','You have the latest version');
+	showNotification('Ready to Connect','Please enter your connect code to get verbally abused.');
 	createWindow();
 	autoUpdater.checkForUpdatesAndNotify();
 });
