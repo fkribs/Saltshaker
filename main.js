@@ -130,6 +130,7 @@ function createWindow () {
 app.on('ready', function() {
 	showNotification('Ready to Connect','Please enter your connect code to get verbally abused.');
 	createWindow();
+	autoUpdater.allowPrerelease = true;
 	autoUpdater.checkForUpdatesAndNotify();
 });
 
