@@ -1,4 +1,5 @@
-const { app, BrowserWindow, Notification} = require('electron')
+const { app, BrowserWindow, Notification} = require('electron');
+const {autoUpdater} = require('electron-updater');
 const path = require('path');
 const {
 	SlpParser,
@@ -24,7 +25,6 @@ const {
 	let gameDirectory = '';
 
 	slpStream.on(SlpStreamEvent.COMMAND, (event) => {
-		// console.log("Commmand parsed by SlpStream: " + event.command + event.payload)
 		parser.handleCommand(event.command, event.payload);
 		if (event.command == 54) {
 			win.webContents.send(
@@ -38,16 +38,6 @@ const {
 			);
 		}
 	});
-
-	// parser.on(SlpParserEvent.END, (frameEntry) => {
-	// 	// console.log(frameEntry.players[1].post.positionY);
-	// 	const slippiFiles = GetGameFiles();
-	// 	if (!slippiFiles.length) return;
-	// 	setTimeout(() => {
-	// 		//let stats = GetRecentGameStats(slippiFiles);
-	// 		win.webContents.send('game-end', frameEntry, stats, parser.getSettings());
-	// 	}, 500);
-	// });
 
 	dolphinConnection.on(ConnectionEvent.STATUS_CHANGE, (status) => {
 		// Disconnect from Slippi server when we disconnect from Dolphin
@@ -116,7 +106,7 @@ function createWindow () {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: true,
         contextIsolation: true 
-    },
+    }
   });
 
   win.webContents.once('dom-ready', () => {
@@ -128,32 +118,42 @@ function createWindow () {
 			}
 		});
   //win.loadURL(`https://localhost:44389/`)
-  win.loadURL(`https://signalrcorewebrtc20240210154024.azurewebsites.net/`)
+  win.loadURL(`https://signalrcorewebrtc20240210154024.azurewebsites.net/`);
   
   // Event when the window is closed.
   win.on('closed', function () {
-    win = null
-  })
+    win = null;
+  });
 }
 
 // Create window on electron initialization
 app.on('ready', function() {
-	showNotification('Ready to Connect','Enter your username to get verbally abused.')
-	createWindow()
-})
+	showNotification('Ready to Connect','Enter your connect code to get verbally abused.');
+	createWindow();
+	autoUpdater.checkForUpdatesAndNotify();
+});
+
+autoUpdater.on('update-available', () => {
+	console.log('Update available!');
+});
+
+autoUpdater.on('update-downloaded', () => {
+	console.log('Update downloaded; will install now');
+	autoUpdater.quitAndInstall();
+});
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function () {
 
   // On macOS specific close process
   if (process.platform !== 'darwin') {
-    app.quit()
+    app.quit();
   }
-})
+});
 
 app.on('activate', function () {
   // macOS specific close process
   if (win === null) {
-    createWindow()
+    createWindow();
   }
-})
+});
