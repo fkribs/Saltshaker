@@ -1,11 +1,12 @@
 {
   "name": "saltshaker-client",
-  "version": "0.0.6",
+  "version": "0.0.1",
   "main": "main.js",
   "productName": "Salt Shaker",
   "scripts": {
     "start": "electron . --inspect-brk",
     "electron-build": "electron-builder",
+    "publish": "electron-builder --publish always",
     "lint": "eslint src/"
   },
   "private": true,

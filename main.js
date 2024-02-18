@@ -130,13 +130,12 @@ function createWindow () {
 app.on('ready', function() {
 	showNotification('Ready to Connect','Enter your connect code to get verbally abused.');
 	createWindow();
-	autoUpdater.allowPrerelease = true;
-	autoUpdater.forceDevUpdateConfig = true;
 	autoUpdater.checkForUpdatesAndNotify();
 });
 
 autoUpdater.on('update-available', () => {
 	showNotification('Update available!');
+	autoUpdater.downloadUpdate();
 });
 
 autoUpdater.on('update-not-available', () => {
@@ -146,6 +145,10 @@ autoUpdater.on('update-not-available', () => {
 autoUpdater.on('update-downloaded', () => {
 	showNotification('Update downloaded; will install now');
 	autoUpdater.quitAndInstall();
+});
+
+autoUpdater.on('error', (error) => {
+	showNotification('Error', error);
 });
 
 // Quit when all windows are closed.
