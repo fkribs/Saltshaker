@@ -131,15 +131,20 @@ app.on('ready', function() {
 	showNotification('Ready to Connect','Enter your connect code to get verbally abused.');
 	createWindow();
 	autoUpdater.allowPrerelease = true;
+	autoUpdater.forceDevUpdateConfig = true;
 	autoUpdater.checkForUpdatesAndNotify();
 });
 
 autoUpdater.on('update-available', () => {
-	console.log('Update available!');
+	showNotification('Update available!');
+});
+
+autoUpdater.on('update-not-available', () => {
+	showNotification('Update not available!');
 });
 
 autoUpdater.on('update-downloaded', () => {
-	console.log('Update downloaded; will install now');
+	showNotification('Update downloaded; will install now');
 	autoUpdater.quitAndInstall();
 });
 
