@@ -18,6 +18,9 @@ const {
 	GameMode
 } = require('@slippi/slippi-js');
 
+const log = require('electron-log');
+console.log = log.log;
+
     var dolphinConnection = new DolphinConnection();
 	var parser = new SlpParser();
 	var slpStream = new SlpStream();
@@ -128,7 +131,6 @@ function createWindow () {
 
 // Create window on electron initialization
 app.on('ready', function() {
-	showNotification('Ready to Connect','Enter your connect code to get verbally abused.');
 	createWindow();
 	autoUpdater.checkForUpdatesAndNotify();
 });
