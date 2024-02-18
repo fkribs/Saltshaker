@@ -149,7 +149,7 @@ autoUpdater.on('update-downloaded', () => {
 });
 
 autoUpdater.on('error', (error) => {
-	showNotification('Failed to download update', error.message);
+	showNotification('Failed to download update', error.message, 10_000);
 });
 
 // Quit when all windows are closed.
