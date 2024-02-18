@@ -137,7 +137,6 @@ app.on('ready', function() {
 
 autoUpdater.on('update-available', () => {
 	console.log('Update available!');
-	autoUpdater.downloadUpdate();
 });
 
 autoUpdater.on('update-not-available', () => {
