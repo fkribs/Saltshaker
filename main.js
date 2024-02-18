@@ -134,21 +134,21 @@ app.on('ready', function() {
 });
 
 autoUpdater.on('update-available', () => {
-	showNotification('Update available!');
+	console.log('Update available!');
 	autoUpdater.downloadUpdate();
 });
 
 autoUpdater.on('update-not-available', () => {
-	showNotification('Update not available!');
+	console.log('Application up to date!');
 });
 
 autoUpdater.on('update-downloaded', () => {
-	showNotification('Update downloaded; will install now');
+	console.log('Update downloaded; will install now');
 	autoUpdater.quitAndInstall();
 });
 
 autoUpdater.on('error', (error) => {
-	showNotification('Error', error);
+	showNotification('Failed to download update', error);
 });
 
 // Quit when all windows are closed.
