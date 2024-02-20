@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Notification} = require('electron');
 const {autoUpdater} = require('electron-updater');
 const path = require('path');
+const os = require('os');
+const fs = require('fs').promises;
 const {
 	SlpParser,
 	DolphinConnection,
@@ -132,8 +134,27 @@ function createWindow () {
 // Create window on electron initialization
 app.on('ready', function() {
 	createWindow();
+	setTimeout(() => {
+		readUserInfo();
+	}, 3000);
 	autoUpdater.checkForUpdatesAndNotify();
 });
+
+const readUserInfo = async () => {
+	const homeDir = os.homedir();
+	const userJsonPath = path.join(homeDir, 'AppData', 'Roaming', 'Slippi Launcher', 'netplay', 'User', 'Slippi', 'user.json');
+	
+	var userInfo = null;
+	try {
+		const data = await fs.readFile(userJsonPath, 'utf-8');
+		userInfo = JSON.parse(data);
+		console.log(userInfo);
+	}catch (error){
+		console.error('Error reading user info:', error);
+	}
+	win.webContents.send('user-retrieved', userInfo);
+}
+
 
 autoUpdater.on('update-available', () => {
 	console.log('Update available!');

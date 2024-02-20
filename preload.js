@@ -6,5 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onGameEnd: (callback) => {
         ipcRenderer.on('game-end', callback);
+    },
+    onUserRetrieved: (callback) => {
+        ipcRenderer.on('user-retrieved', callback);
     }
 });
