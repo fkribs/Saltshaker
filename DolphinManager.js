@@ -1,9 +1,10 @@
 const { DolphinConnection, Ports, ConnectionEvent, ConnectionStatus, DolphinMessageType } = require('@slippi/slippi-js');
 
 class DolphinManager {
-    constructor(windowManager) {
+    constructor(windowManager, slippiManager) {
         this.dolphinConnection = new DolphinConnection();
         this.webContents = windowManager.getWebContents(); // For sending events to the renderer process
+        this.slippiManager = slippiManager;
         this.setupListeners();
     }
 
@@ -30,7 +31,7 @@ class DolphinManager {
 				break;
 			case DolphinMessageType.GAME_EVENT:
 				var decoded = Buffer.from(message.payload, 'base64');
-				slpStream.write(decoded);
+				this.slippiManager.writeToStream(decoded);
 				break;
 		}
         });
@@ -42,10 +43,10 @@ class DolphinManager {
     }
 
     connect() {
-        win.webContents.send('disconnected-event', 'disconnected');
-			if (dolphinConnection.getStatus() === ConnectionStatus.DISCONNECTED) {
+        this.webContents.send('disconnected-event', 'disconnected');
+			if (this.dolphinConnection.getStatus() === ConnectionStatus.DISCONNECTED) {
 				// Now try connect to our local Dolphin instance
-				dolphinConnection.connect('127.0.0.1', Ports.DEFAULT);
+				this.dolphinConnection.connect('127.0.0.1', Ports.DEFAULT);
 			}
     }
 

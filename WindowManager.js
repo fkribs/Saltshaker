@@ -11,6 +11,8 @@ class WindowManager {
             width: 800,
             height: 800,
             show: true,
+            alwaysOnTop: true,
+            transparent: false,
             backgroundColor: '#ffffff',
             icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
             title: 'Salt Shaker',

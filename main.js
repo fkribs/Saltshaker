@@ -12,8 +12,8 @@ let userManager, dolphinManager, slippiManager;
 function setupManagers() {
     // Initialize managers that depend on the window being created
     userManager = new UserManager(windowManager);
-    dolphinManager = new DolphinManager(windowManager);
-    slippiManager = new SlippiManager(windowManager, dolphinManager);
+    slippiManager = new SlippiManager(windowManager);
+    dolphinManager = new DolphinManager(windowManager, slippiManager);
 
     // Perform initial setup tasks for each manager
 	setTimeout(() => userManager.readUserInfo(), 1000);
@@ -24,6 +24,7 @@ app.on('ready', () => {
     windowManager.createWindow();
     setupManagers(); // Setup managers after the window is created
     updateManager.checkForUpdates();
+    dolphinManager.connect();
 });
 
 app.on('window-all-closed', () => {
