@@ -1,13 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    onGameStart: (callback) => {
-        ipcRenderer.on('game-start', callback);
+    loadPlugin: (pluginId, pluginCode) => {
+        ipcRenderer.send('load-plugin', {pluginId, pluginCode});
     },
-    onGameEnd: (callback) => {
-        ipcRenderer.on('game-end', callback);
+    onConnect: (callback) => {
+        ipcRenderer.on('connect', callback);
     },
-    onUserRetrieved: (callback) => {
-        ipcRenderer.on('user-retrieved', callback);
+    onDisconnect: (callback) => {
+        ipcRenderer.on('disconnect', callback);
+    },
+    onSetSession: (callback) => {
+        ipcRenderer.on('setSession', callback);
     }
 });

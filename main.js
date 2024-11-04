@@ -1,30 +1,46 @@
-const { app } = require('electron');
+const { app, ipcMain, session } = require('electron');
 const WindowManager = require('./WindowManager');
 const DolphinManager = require('./DolphinManager');
 const SlippiManager = require('./SlippiManager');
 const UpdateManager = require('./UpdateManager');
 const UserManager = require('./UserManager');
+const PluginManager = require('./PluginManager');
+
+const { EventEmitter } = require('events');
+
 
 let windowManager = new WindowManager();
 let updateManager = new UpdateManager();
-let userManager, dolphinManager, slippiManager;
+let userManager, dolphinManager, slippiManager, pluginManager;
+const pluginEvents = new EventEmitter();
 
 function setupManagers() {
-    // Initialize managers that depend on the window being created
-    userManager = new UserManager(windowManager);
-    slippiManager = new SlippiManager(windowManager);
-    dolphinManager = new DolphinManager(windowManager, slippiManager);
+    //userManager = new UserManager(windowManager);
+    //slippiManager = new SlippiManager(windowManager);
+    //dolphinManager = new DolphinManager(windowManager, slippiManager);
+    pluginManager = new PluginManager(windowManager);
 
-    // Perform initial setup tasks for each manager
-	setTimeout(() => userManager.readUserInfo(), 1000);
-    // Add any other setup tasks for DolphinManager and SlippiManager if necessary
+    //setTimeout(() => userManager.readUserInfo(), 1000);
+}
+
+// Function to set up ipcMain listeners
+function setupIpcMainListeners() {
+    ipcMain.on('load-plugin', (event, { pluginId, pluginCode }) => {
+        console.log(`Loading plugin: ${pluginId}`);
+        try {
+            pluginManager.loadAndRunPlugin(pluginId, pluginCode);
+        } catch (error) {
+            console.error(`Failed to load plugin ${pluginId}:`, error);
+        }
+    });
 }
 
 app.on('ready', () => {
     windowManager.createWindow();
     setupManagers(); // Setup managers after the window is created
+    setupIpcMainListeners(); // Setup ipcMain listeners
     updateManager.checkForUpdates();
-    dolphinManager.connect();
+    // dolphinManager.connect(); // Uncomment if needed
 });
 
 app.on('window-all-closed', () => {

@@ -9,6 +9,7 @@ class UserManager {
     }
 
     async readUserInfo() {
+        debugger;
         const homeDir = os.homedir();
         const userJsonPath = path.join(homeDir, 'AppData', 'Roaming', 'Slippi Launcher', 'netplay', 'User', 'Slippi', 'user.json');
         

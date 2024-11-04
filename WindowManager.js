@@ -23,7 +23,7 @@ class WindowManager {
             },
         });
 
-        this.window.loadURL(`https://signalrcorewebrtc20240210154024.azurewebsites.net/`);
+        this.window.loadURL(`https://localhost:7287/`);
 
         this.window.on('closed', () => {
             this.window = null;
