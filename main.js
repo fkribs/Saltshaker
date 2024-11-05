@@ -1,9 +1,6 @@
 const { app, ipcMain, session } = require('electron');
 const WindowManager = require('./WindowManager');
-const DolphinManager = require('./DolphinManager');
-const SlippiManager = require('./SlippiManager');
 const UpdateManager = require('./UpdateManager');
-const UserManager = require('./UserManager');
 const PluginManager = require('./PluginManager');
 
 const { EventEmitter } = require('events');

@@ -10,6 +10,7 @@ class PluginManager {
         this.pluginEvents.on('setSession', this.handleSetSession.bind(this));
         this.pluginEvents.on('connect', this.handleConnect.bind(this));
         this.pluginEvents.on('disconnect', this.handleDisconnect.bind(this));
+        this.activePlugins = {};
     }
 
     loadAndRunPlugin(pluginId, pluginCode) {
@@ -20,6 +21,7 @@ class PluginManager {
             require,
             setTimeout,
             setInterval,
+            Buffer,
             pluginEvents: this.pluginEvents // Expose the EventEmitter to the plugin
         };
 
@@ -27,14 +29,21 @@ class PluginManager {
         const pluginScript = new vm.Script(pluginCode);
 
         try {
-            // Execute the plugin code
+            // Run the plugin code
             pluginScript.runInContext(vmContext);
-            console.log(`Plugin ${pluginId} loaded successfully.`);
+
+            // Capture and persist the plugin instance
             const plugin = context.module.exports;
-            plugin.onInit();
+            if (plugin && typeof plugin.onInit === 'function') {
+                this.activePlugins[pluginId] = plugin; // Store the plugin instance
+                plugin.onInit(); // Pass the EventEmitter to enable event handling
+            }
+
+            console.log(`Plugin ${pluginId} loaded and initialized.`);
         } catch (error) {
             console.error(`Failed to load plugin ${pluginId}:`, error);
         }
+        
     }
 
     // Event handler for setSession
