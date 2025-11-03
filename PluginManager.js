@@ -2,73 +2,75 @@ const { EventEmitter } = require('events');
 const vm = require('vm');
 
 class PluginManager {
-    constructor(windowManager) {
-        this.webContents = windowManager.getWebContents(); // Renderer communication interface
-        this.pluginEvents = new EventEmitter(); // EventEmitter for plugin events
+  constructor(windowManager) {
+    this.windowManager = windowManager;
+    this.webContents = this.windowManager?.getWebContents?.() || null;
 
-        // Bind event handlers
-        this.pluginEvents.on('setSession', this.handleSetSession.bind(this));
-        this.pluginEvents.on('connect', this.handleConnect.bind(this));
-        this.pluginEvents.on('disconnect', this.handleDisconnect.bind(this));
-        this.activePlugins = {};
+    this.pluginEvents = new EventEmitter();
+    // Use arrow wrappers instead of bind (avoids undefined method edge cases)
+     this.pluginEvents.on('setSession', (sessionId) => this.handleSetSession?.(sessionId));
++   this.pluginEvents.on('connect',   (payload)   => this.handleConnect?.(payload));
++   this.pluginEvents.on('disconnect',(payload)   => this.handleDisconnect?.(payload));
+    
+
+    this.activePlugins = {};
+  }
+
+  getWebContents() {
+    // refresh lazily in case window was created after PM init
+    this.webContents ||= this.windowManager?.getWebContents?.();
+    return this.webContents;
+  }
+
+  loadAndRunPlugin(pluginId, pluginCode) {
+    console.log(`Loading plugin: ${pluginId}`);
+
+    // make plugin debuggable in DevTools
+    if (!/\/\/#\s*sourceURL=/.test(pluginCode)) {
+      pluginCode += `\n//# sourceURL=plugin-${pluginId}.js\n`;
     }
 
-    loadAndRunPlugin(pluginId, pluginCode) {
-        console.log(`Loading plugin: ${pluginId}`);
-        const context = {
-            console,
-            module: { exports: {} },
-            require,
-            setTimeout,
-            setInterval,
-            Buffer,
-            pluginEvents: this.pluginEvents // Expose the EventEmitter to the plugin
-        };
+    const context = {
+      console,
+      module: { exports: {} },
+      require,
+      setTimeout, setInterval, clearTimeout, clearInterval,
+      Buffer,
+      pluginEvents: this.pluginEvents,
+    };
+    context.global = context;
 
-        const vmContext = vm.createContext(context);
-        const pluginScript = new vm.Script(pluginCode);
-
-        try {
-            // Run the plugin code
-            pluginScript.runInContext(vmContext);
-
-            // Capture and persist the plugin instance
-            const plugin = context.module.exports;
-            if (plugin && typeof plugin.onInit === 'function') {
-                this.activePlugins[pluginId] = plugin; // Store the plugin instance
-                plugin.onInit(); // Pass the EventEmitter to enable event handling
-            }
-
-            console.log(`Plugin ${pluginId} loaded and initialized.`);
-        } catch (error) {
-            console.error(`Failed to load plugin ${pluginId}:`, error);
-        }
-        
+    const vmContext = vm.createContext(context);
+    const script = new vm.Script(pluginCode, { filename: `plugin-${pluginId}.js`, displayErrors: true });
+    try {
+      script.runInContext(vmContext, { displayErrors: true });
+      const plugin = context.module.exports;
+      if (plugin && typeof plugin.onInit === 'function') {
+        this.activePlugins[pluginId] = plugin;
+        plugin.onInit();
+      }
+      console.log(`Plugin ${pluginId} loaded and initialized.`);
+    } catch (err) {
+      console.error(`Failed to load plugin ${pluginId}:`, err);
     }
+  }
 
-    // Event handler for setSession
-    handleSetSession(sessionId) {
-        console.log(`Plugin set session ID: ${sessionId}`);
-        if (this.webContents) {
-            this.webContents.send('setSession', sessionId);
-        }
-    }
+  // --- handlers ---
+  handleSetSession(sessionId) {
+    console.log(`Plugin set session ID: ${sessionId}`);
+    this.getWebContents()?.send('setSession', sessionId);
+  }
 
-    // Event handler for connect
-    handleConnect() {
-        console.log("Plugin connected to session");
-        if (this.webContents) {
-            this.webContents.send('connect');
-        }
-    }
+  handleConnect(payload) {
+    console.log('Plugin connected to session');
+    console.log('Payload: ' + payload);
+    this.getWebContents()?.send('connect', payload);
+  }
 
-    // Event handler for disconnect
-    handleDisconnect() {
-        console.log("Plugin disconnected from session");
-        if (this.webContents) {
-            this.webContents.send('disconnect');
-        }
-    }
+  handleDisconnect(payload) {
+    console.log('Plugin disconnected from session');
+    this.getWebContents()?.send('disconnect', payload);
+  }
 }
 
 module.exports = PluginManager;

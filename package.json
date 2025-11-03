@@ -1,36 +1,108 @@
 {
   "name": "saltshaker-client",
-  "version": "0.1.3",
+  "version": "0.2.5",
+  "description": "Anonymous voice chat for Slippi players.",
+  "author": "Forrest Kribs",
   "main": "main.js",
-  "productName": "Salt Shaker",
+  "productName": "SaltShaker",
+  "private": true,
+
   "scripts": {
     "start": "electron . --inspect-brk",
-    "electron-build": "electron-builder",
+    "build": "electron-builder",
     "publish": "electron-builder --publish always",
     "lint": "eslint src/"
   },
-  "private": true,
+
   "dependencies": {
     "@slippi/slippi-js": "^6.7.0",
     "electron-log": "^5.1.1",
     "electron-updater": "^6.1.7",
     "express": "^4.18.2"
   },
+
   "devDependencies": {
     "@types/express": "^4.17.17",
     "@types/node": "^18.18.0",
     "electron": "^28.2.2",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.0.0",
     "typescript": "~5.3.3"
   },
+
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fkribs/Saltshaker.git"
+  },
+
   "build": {
+    "appId": "com.fkribs.saltshaker",
+    "productName": "SaltShaker",
+    "artifactName": "SaltShaker-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+
+    "files": [
+      "**/*",
+      "!dist{,/**/*}",
+      "!node_modules/.cache{,/**/*}",
+      "!**/*.map"
+    ],
+
+    "extraResources": [
+      {
+        "from": "assets/",
+        "to": "assets/",
+        "filter": ["**/*"]
+      }
+    ],
+
     "publish": [
       {
         "provider": "github",
         "owner": "fkribs",
         "repo": "Saltshaker"
       }
-    ]
+    ],
+
+    "win": {
+  "target": [
+    {
+      "target": "nsis",
+      "arch": ["x64"]
+    }
+  ],
+  "icon": "build/icon.ico",
+  "artifactName": "SaltShaker-${version}-Windows.exe",
+  "executableName": "SaltShaker",
+  "requestedExecutionLevel": "asInvoker",
+  "forceCodeSigning": false,
+  "verifyUpdateCodeSignature": false
+},
+
+
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "allowToChangeInstallationDirectory": false
+    },
+
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "src/assets/icon.png",
+      "artifactName": "SaltShaker-${version}-MacOS.dmg"
+    },
+
+    "compression": "store"
   }
 }
