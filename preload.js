@@ -15,6 +15,23 @@ const api = {
     ipcRenderer.send('load-plugin', { pluginId, pluginCode });
   },
 
+  runInstalledPlugin: (pluginId) => ipcRenderer.invoke("run-plugin", pluginId),
+
+  async getInstalledPlugins() {
+    return ipcRenderer.invoke("list-installed-plugins");
+  },
+
+  async installPlugin(payload) {
+    // payload: { id, name, version, sha256, bytes }
+    return ipcRenderer.invoke('install-plugin', payload);
+  },
+
+  onPluginInstalled(callback) {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on("plugins-installed", handler);
+    return () => ipcRenderer.off("plugins-installed", handler);
+  },
+
   // Return an unsubscribe to avoid leaks
   onConnect(callback) {
     const handler = (_evt, payload) => callback?.(payload);

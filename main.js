@@ -77,6 +77,26 @@ function setupIpcMainListeners() {
       log.error(`Failed to load plugin ${pluginId}:`, err);
     }
   });
+
+  ipcMain.handle('install-plugin', async (_event, payload) => {
+    log.info('[install-plugin]', payload.id);
+
+    try {
+      return await pluginManager.installPlugin(payload);
+    } catch (err) {
+      log.error('Failed to install plugin', payload.id, err);
+      throw err;
+    }
+  });
+
+  ipcMain.handle("run-plugin", async (_event, pluginId) => {
+    return pluginManager.runInstalledPlugin(pluginId);
+  });
+  ipcMain.handle("list-installed-plugins", async () => {
+    return await pluginManager.listInstalledPlugins();
+  });
+  ipcMain.handle("bridge:dolphin:subscribe", dolphinBridge.subscribe);
+  ipcMain.handle("bridge:slippi:user", slippiBridge.getUser);
 }
 
 function setupProcessGuards() {

@@ -6,21 +6,20 @@
   "main": "main.js",
   "productName": "SaltShaker",
   "private": true,
-
   "scripts": {
     "start": "electron . --inspect-brk",
     "build": "electron-builder",
     "publish": "electron-builder --publish always",
     "lint": "eslint src/"
   },
-
   "dependencies": {
     "@slippi/slippi-js": "^6.7.0",
+    "adm-zip": "^0.5.16",
     "electron-log": "^5.1.1",
     "electron-updater": "^6.1.7",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "tar": "^7.5.2"
   },
-
   "devDependencies": {
     "@types/express": "^4.17.17",
     "@types/node": "^18.18.0",
@@ -29,38 +28,34 @@
     "eslint": "^8.0.0",
     "typescript": "~5.3.3"
   },
-
   "repository": {
     "type": "git",
     "url": "https://github.com/fkribs/Saltshaker.git"
   },
-
   "build": {
     "appId": "com.fkribs.saltshaker",
     "productName": "SaltShaker",
     "artifactName": "SaltShaker-${version}-${os}-${arch}.${ext}",
     "asar": true,
-
     "directories": {
       "buildResources": "build",
       "output": "dist"
     },
-
     "files": [
       "**/*",
       "!dist{,/**/*}",
       "!node_modules/.cache{,/**/*}",
       "!**/*.map"
     ],
-
     "extraResources": [
       {
         "from": "assets/",
         "to": "assets/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
-
     "publish": [
       {
         "provider": "github",
@@ -68,41 +63,40 @@
         "repo": "Saltshaker"
       }
     ],
-
     "win": {
-  "target": [
-    {
-      "target": "nsis",
-      "arch": ["x64"]
-    }
-  ],
-  "icon": "build/icon.ico",
-  "artifactName": "SaltShaker-${version}-Windows.exe",
-  "executableName": "SaltShaker",
-  "requestedExecutionLevel": "asInvoker",
-  "forceCodeSigning": false,
-  "verifyUpdateCodeSignature": false
-},
-
-
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "SaltShaker-${version}-Windows.exe",
+      "executableName": "SaltShaker",
+      "requestedExecutionLevel": "asInvoker",
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false
+    },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
       "runAfterFinish": true,
       "allowToChangeInstallationDirectory": false
     },
-
     "mac": {
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "src/assets/icon.png",
       "artifactName": "SaltShaker-${version}-MacOS.dmg"
     },
-
     "compression": "store"
   }
 }
