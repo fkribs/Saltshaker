@@ -8,18 +8,21 @@ const UpdateManager = require('./UpdateManager');
 const PluginManager = require('./PluginManager');
 const { EventEmitter } = require('events');
 
+// Bridges
+const registerFileBridge = require('./bridges/fileBridge');
+const registerDolphinBridge = require('./bridges/dolphinBridge');
+
 const isDev = !app.isPackaged;
 
 // -------------------- Environment --------------------
 if (isDev) {
-  app.commandLine.appendSwitch('remote-debugging-port', '9222'); // attach VS Code "Renderer"
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
   app.commandLine.appendSwitch('enable-logging');
   app.commandLine.appendSwitch('vmodule', 'webrtc/*=3');
   process.env.ELECTRON_ENABLE_LOGGING = 'true';
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
   console.log('[dev] Running with multi-instance mode enabled');
 } else {
-  // Hide console window and suppress noisy Chromium logs
   process.env.ELECTRON_ENABLE_LOGGING = 'false';
   app.commandLine.appendSwitch('disable-logging');
 }
@@ -60,49 +63,48 @@ function setupManagers() {
   }
 }
 
+// -------------------- IPC --------------------
 function setupIpcMainListeners() {
-  const _on = ipcMain.on.bind(ipcMain);
-  ipcMain.on = (channel, listener) => {
-    _on(channel, (event, ...args) => {
-      log.info('[ipcMain]', channel, ...args);
-      listener(event, ...args);
-    });
-  };
-
-  ipcMain.on('load-plugin', (event, { pluginId, pluginCode }) => {
+  // ---------------- Plugin lifecycle ----------------
+  ipcMain.on('load-plugin', (_event, { pluginId, pluginCode }) => {
     log.info(`Loading plugin: ${pluginId}`);
-    try {
-      pluginManager.loadAndRunPlugin(pluginId, pluginCode);
-    } catch (err) {
-      log.error(`Failed to load plugin ${pluginId}:`, err);
-    }
+    pluginManager.loadAndRunPlugin(pluginId, pluginCode);
   });
 
   ipcMain.handle('install-plugin', async (_event, payload) => {
     log.info('[install-plugin]', payload.id);
-
-    try {
-      return await pluginManager.installPlugin(payload);
-    } catch (err) {
-      log.error('Failed to install plugin', payload.id, err);
-      throw err;
-    }
+    return pluginManager.installPlugin(payload);
   });
 
-  ipcMain.handle("run-plugin", async (_event, pluginId) => {
+  ipcMain.handle('run-plugin', async (_event, pluginId) => {
     return pluginManager.runInstalledPlugin(pluginId);
   });
-  ipcMain.handle("list-installed-plugins", async () => {
-    return await pluginManager.listInstalledPlugins();
+
+  ipcMain.handle('list-installed-plugins', async () => {
+    return pluginManager.listInstalledPlugins();
   });
-  ipcMain.handle("bridge:dolphin:subscribe", dolphinBridge.subscribe);
-  ipcMain.handle("bridge:slippi:user", slippiBridge.getUser);
+
+  // ---------------- Bridges ----------------
+  const getPluginContext = (pluginId) =>
+    pluginManager?.getInstalledPluginContext?.(pluginId);
+
+  registerFileBridge({
+    ipcMain,
+    getPluginContext
+  });
+
+  registerDolphinBridge({
+    ipcMain,
+    pluginEvents
+  });
 }
 
+// -------------------- Guards --------------------
 function setupProcessGuards() {
   process.on('uncaughtException', (err) => {
     log.error('[uncaughtException]', err);
   });
+
   process.on('unhandledRejection', (reason) => {
     log.error('[unhandledRejection]', reason);
   });
@@ -110,6 +112,7 @@ function setupProcessGuards() {
   app.on('render-process-gone', (_e, details) => {
     log.error('[RendererGone]', details);
   });
+
   app.on('child-process-gone', (_e, details) => {
     log.error('[ChildGone]', details);
   });
@@ -121,6 +124,7 @@ app.whenReady().then(() => {
   createMainWindow();
   setupManagers();
   setupIpcMainListeners();
+
   try {
     updateManager.checkForUpdates();
   } catch (err) {
@@ -136,7 +140,6 @@ app.on('activate', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Quit when all windows closed (except macOS)
   if (process.platform !== 'darwin') app.quit();
 });
 

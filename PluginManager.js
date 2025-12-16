@@ -9,6 +9,7 @@ const { app } = require("electron");
 
 class PluginManager {
   constructor(windowManager) {
+    this.installedPluginContexts = new Map();
     this.windowManager = windowManager;
     this.webContents = null;
 
@@ -59,7 +60,8 @@ class PluginManager {
   // -------------------------------------------
   // Installation
   // -------------------------------------------
-  async installPlugin({ id, name, version, sha256, bytes }) {
+  async installPlugin({ id, name, version, sha256, bytes, permissions = [], resources = [] }) {
+
     await this.ensurePluginDir();
 
     const safeId = this.sanitizeId(id);
@@ -97,11 +99,22 @@ class PluginManager {
       path.join(pluginFolder, "metadata.json"),
       JSON.stringify(metadata, null, 2)
     );
+    this.installedPluginContexts.set(id, {
+  id,
+  permissions,
+  resources: Object.fromEntries(
+    resources.map(r => [r.id, r])
+  )
+});
 
     log.info(`Plugin ${id} installed at ${pluginFolder}`);
     this.getWebContents()?.send("plugins:installed", metadata);
     return { ok: true, path: pluginFolder };
   }
+
+  getInstalledPluginContext(pluginId) {
+  return this.installedPluginContexts.get(pluginId);
+}
 
   // -------------------------------------------
   // Listing installed plugins
@@ -152,70 +165,95 @@ class PluginManager {
   // Sandbox Execution
   // -------------------------------------------
   loadAndRunPlugin(pluginId, pluginCode, metadata = null) {
-    log.info(`Activating plugin: ${pluginId}`);
+  log.info(`Activating plugin: ${pluginId}`);
 
-    if (!metadata) {
-      metadata = { id: pluginId, name: pluginId };
-    }
-
-    // ensure debuggability
-    if (!/\/\/#\s*sourceURL=/.test(pluginCode)) {
-      pluginCode += `\n//# sourceURL=${pluginId}.js\n`;
-    }
-
-    // Safe API exposed to plugin
-    const sandboxApi = {
-      log: (...args) => log.info(`[plugin:${pluginId}]`, ...args),
-      sendEvent: (event, payload) => this.emitPluginEvent(event, payload),
-
-      // Bridge to host APIs (permission-gated)
-      host: {
-        async get(resourceId) {
-          // Verify plugin has the permission (resource:slippi:user.read)
-          if (resourceId === "slippi:user") {
-            return await hostApi.getSlippiUser(); // safe host method
-          }
-          throw new Error(`Access denied to ${resourceId}`);
-        },
-        async invoke(method, args) {
-          if (method === "dolphin.subscribe") {
-            return await hostApi.subscribeToDolphin(args);
-          }
-          throw new Error(`Unknown method: ${method}`);
-        },
-      },
-    };
-
-
-    const context = {
-      exports: {},
-      module: { exports: {} },
-      plugin: metadata,
-      api: sandboxApi
-    };
-    context.global = context;
-
-    const vmContext = vm.createContext(context);
-
-    const script = new vm.Script(pluginCode, {
-      filename: `${pluginId}.js`,
-      displayErrors: true
-    });
-
-    try {
-      script.runInContext(vmContext, { displayErrors: true });
-      const pluginExport = context.module.exports;
-
-      if (pluginExport && typeof pluginExport.onInit === "function") {
-        this.activePlugins.set(pluginId, pluginExport);
-        pluginExport.onInit(sandboxApi);
-      }
-
-      log.info(`Plugin ${pluginId} activated`);
-    } catch (err) {
-      log.error(`Plugin ${pluginId} failed to activate`, err);
-    }
+  if (!metadata) {
+    metadata = { id: pluginId, name: pluginId };
   }
+
+  // Ensure debuggability in DevTools
+  if (!/\/\/#\s*sourceURL=/.test(pluginCode)) {
+    pluginCode += `\n//# sourceURL=${pluginId}.js\n`;
+  }
+
+  const wc = this.getWebContents();
+  if (!wc) {
+    throw new Error("Renderer not ready");
+  }
+
+  // ----------------------------
+  // Safe API exposed to plugin
+  // ----------------------------
+  const sandboxApi = {
+    log: (...args) => log.info(`[plugin:${pluginId}]`, ...args),
+
+    sendEvent: (event, payload) => {
+      this.emitPluginEvent(event, payload);
+    },
+
+    on: (event, handler) => {
+      const listener = (_evt, payload) => handler(payload);
+      wc.on(event, listener);
+      return () => wc.off(event, listener);
+    },
+
+    host: {
+      file: {
+        readText: (resourceId) =>
+          wc.executeJavaScript(
+            `window.salt.host.file.readText(${JSON.stringify(resourceId)}, ${JSON.stringify(pluginId)})`
+          ),
+
+        readJson: (resourceId) =>
+          wc.executeJavaScript(
+            `window.salt.host.file.readJson(${JSON.stringify(resourceId)}, ${JSON.stringify(pluginId)})`
+          )
+      },
+
+      dolphin: {
+        subscribe: (options) =>
+          wc.executeJavaScript(
+            `window.salt.host.dolphin.subscribe(${JSON.stringify(pluginId)}, ${JSON.stringify(options)})`
+          )
+      }
+    }
+  };
+
+  // ----------------------------
+  // VM sandbox
+  // ----------------------------
+  const context = {
+    module: { exports: {} },
+    exports: {},
+    api: sandboxApi,
+    plugin: metadata
+  };
+
+  context.global = context;
+
+  const vmContext = vm.createContext(context);
+
+  const script = new vm.Script(pluginCode, {
+    filename: `${pluginId}.js`,
+    displayErrors: true
+  });
+
+  try {
+    script.runInContext(vmContext, { displayErrors: true });
+
+    const pluginExport = context.module.exports;
+    if (pluginExport && typeof pluginExport.onInit === "function") {
+      this.activePlugins.set(pluginId, pluginExport);
+      pluginExport.onInit(sandboxApi);
+    }
+
+    log.info(`Plugin ${pluginId} activated`);
+  } catch (err) {
+    log.error(`Plugin ${pluginId} failed to activate`, err);
+  }
+}
+
+  
 
   // -------------------------------------------
   // Event forwarding to renderer

@@ -1,30 +1,30 @@
 // preload.js
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose a read-only username once (don’t redefine this elsewhere)
+// -------------------- Identity --------------------
 const username =
   process.env.SS_USERNAME ||
   process.env.USERNAME ||
   process.env.USER ||
   'anonymous';
+
 contextBridge.exposeInMainWorld('username', username);
 
-// Core API used by your page
+// -------------------- Salt API --------------------
 const api = {
+  // -------- Plugin lifecycle --------
   loadPlugin(pluginId, pluginCode) {
     ipcRenderer.send('load-plugin', { pluginId, pluginCode });
   },
 
-  runInstalledPlugin: (pluginId) => ipcRenderer.invoke("run-plugin", pluginId),
+  runInstalledPlugin: (pluginId) =>
+    ipcRenderer.invoke("run-plugin", pluginId),
 
-  async getInstalledPlugins() {
-    return ipcRenderer.invoke("list-installed-plugins");
-  },
+  getInstalledPlugins: () =>
+    ipcRenderer.invoke("list-installed-plugins"),
 
-  async installPlugin(payload) {
-    // payload: { id, name, version, sha256, bytes }
-    return ipcRenderer.invoke('install-plugin', payload);
-  },
+  installPlugin: (payload) =>
+    ipcRenderer.invoke('install-plugin', payload),
 
   onPluginInstalled(callback) {
     const handler = (_e, info) => callback(info);
@@ -32,28 +32,40 @@ const api = {
     return () => ipcRenderer.off("plugins-installed", handler);
   },
 
-  // Return an unsubscribe to avoid leaks
-  onConnect(callback) {
-    const handler = (_evt, payload) => callback?.(payload);
-    ipcRenderer.on('connect', handler);
-    return () => ipcRenderer.off('connect', handler);
+  // -------- Host bridge APIs (for plugin sandbox) --------
+  host: {
+    file: {
+      readText(resourceId, pluginId) {
+        return ipcRenderer.invoke("bridge:file.readText", {
+          pluginId,
+          resourceId
+        });
+      },
+      readJson(resourceId, pluginId) {
+        return ipcRenderer.invoke("bridge:file.readJson", {
+          pluginId,
+          resourceId
+        });
+      }
+    },
+
+    dolphin: {
+      subscribe(pluginId, options) {
+        return ipcRenderer.invoke("bridge:dolphin.subscribe", {
+          pluginId,
+          ...options
+        });
+      }
+    }
   },
 
-  onDisconnect(callback) {
-    const handler = (_evt, payload) => callback?.(payload);
-    ipcRenderer.on('disconnect', handler);
-    return () => ipcRenderer.off('disconnect', handler);
-  },
-
-  onSetSession(callback) {
-    const handler = (_evt, sessionId) => callback?.(sessionId);
-    ipcRenderer.on('setSession', handler);
-    return () => ipcRenderer.off('setSession', handler);
+  // -------- Event fanout --------
+  on(event, callback) {
+    const handler = (_evt, payload) => callback(payload);
+    ipcRenderer.on(event, handler);
+    return () => ipcRenderer.off(event, handler);
   }
 };
 
 // Preferred namespace
 contextBridge.exposeInMainWorld('salt', api);
-
-// Back-compat for existing code that calls window.electronAPI.*
-contextBridge.exposeInMainWorld('electronAPI', api);
