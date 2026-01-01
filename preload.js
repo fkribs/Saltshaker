@@ -32,6 +32,15 @@ const api = {
     return () => ipcRenderer.off("plugins-installed", handler);
   },
 
+  uninstallPlugin: (pluginId) =>
+    ipcRenderer.invoke('uninstall-plugin', pluginId),
+
+  onPluginUninstalled(callback) {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on("plugins-uninstalled", handler);
+    return () => ipcRenderer.off("plugins-uninstalled", handler);
+  },
+
   // -------- Host bridge APIs (for plugin sandbox) --------
   host: {
     file: {

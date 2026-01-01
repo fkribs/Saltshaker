@@ -47,7 +47,7 @@ async function readFileLimited(fullPath, maxBytes = 64 * 1024) {
  */
 function registerFileBridge({ ipcMain, getPluginContext }) {
   ipcMain.handle("bridge:file.readText", async (_evt, { pluginId, resourceId }) => {
-    const ctx = getPluginContext(pluginId);
+    const ctx = await getPluginContext(pluginId);
     if (!ctx) throw new Error(`Unknown plugin: ${pluginId}`);
 
     if (!ctx.permissions?.includes("file.read")) {
@@ -62,7 +62,7 @@ function registerFileBridge({ ipcMain, getPluginContext }) {
   });
 
   ipcMain.handle("bridge:file.readJson", async (_evt, { pluginId, resourceId }) => {
-    const ctx = getPluginContext(pluginId);
+    const ctx = await getPluginContext(pluginId);
     if (!ctx) throw new Error(`Unknown plugin: ${pluginId}`);
 
     if (!ctx.permissions?.includes("file.read")) {

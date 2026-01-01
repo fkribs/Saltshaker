@@ -56,10 +56,10 @@ function setupManagers() {
   const wc = windowManager.getWebContents?.();
   if (!wc) {
     app.once('browser-window-created', () => {
-      pluginManager = new PluginManager(windowManager);
+      pluginManager = new PluginManager(windowManager, pluginEvents);
     });
   } else {
-    pluginManager = new PluginManager(windowManager);
+    pluginManager = new PluginManager(windowManager, pluginEvents);
   }
 }
 
@@ -76,6 +76,11 @@ function setupIpcMainListeners() {
     return pluginManager.installPlugin(payload);
   });
 
+  ipcMain.handle('uninstall-plugin', async (_event, pluginId) => {
+    log.info('[uninstall-plugin]', pluginId);
+    return pluginManager.uninstallPlugin(pluginId);
+  });
+
   ipcMain.handle('run-plugin', async (_event, pluginId) => {
     return pluginManager.runInstalledPlugin(pluginId);
   });
@@ -85,8 +90,8 @@ function setupIpcMainListeners() {
   });
 
   // ---------------- Bridges ----------------
-  const getPluginContext = (pluginId) =>
-    pluginManager?.getInstalledPluginContext?.(pluginId);
+  const getPluginContext = async (pluginId) =>
+    await pluginManager?.getInstalledPluginContext?.(pluginId);
 
   registerFileBridge({
     ipcMain,
