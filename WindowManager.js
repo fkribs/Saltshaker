@@ -36,9 +36,10 @@ class WindowManager {
     });
 
     // Load your hosted page
-    this.window.loadURL(
-      'https://localhost:7287/'
-    );
+    //this.window.loadURL(
+    //  'https://localhost:7287/'
+    //);
+    this.window.loadURL('https://signalrcorewebrtc20240210154024-cbhbe3c2c7a0a4hr.canadacentral-01.azurewebsites.net/');
 
     // 🔧 Only open DevTools when in development
     if (isDev) {
