@@ -1,6 +1,6 @@
 {
   "name": "saltshaker-client",
-  "version": "0.2.10",
+  "version": "0.3.0",
   "description": "Anonymous voice chat for Slippi players.",
   "author": "Forrest Kribs",
   "main": "main.js",
