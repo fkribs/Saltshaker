@@ -1,42 +1,80 @@
 // preload.js
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose a read-only username once (don’t redefine this elsewhere)
+// -------------------- Identity --------------------
 const username =
   process.env.SS_USERNAME ||
   process.env.USERNAME ||
   process.env.USER ||
   'anonymous';
+
 contextBridge.exposeInMainWorld('username', username);
 
-// Core API used by your page
+// -------------------- Salt API --------------------
 const api = {
+  // -------- Plugin lifecycle --------
   loadPlugin(pluginId, pluginCode) {
     ipcRenderer.send('load-plugin', { pluginId, pluginCode });
   },
 
-  // Return an unsubscribe to avoid leaks
-  onConnect(callback) {
-    const handler = (_evt, payload) => callback?.(payload);
-    ipcRenderer.on('connect', handler);
-    return () => ipcRenderer.off('connect', handler);
+  runInstalledPlugin: (pluginId) =>
+    ipcRenderer.invoke("run-plugin", pluginId),
+
+  getInstalledPlugins: () =>
+    ipcRenderer.invoke("list-installed-plugins"),
+
+  installPlugin: (payload) =>
+    ipcRenderer.invoke('install-plugin', payload),
+
+  onPluginInstalled(callback) {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on("plugins-installed", handler);
+    return () => ipcRenderer.off("plugins-installed", handler);
   },
 
-  onDisconnect(callback) {
-    const handler = (_evt, payload) => callback?.(payload);
-    ipcRenderer.on('disconnect', handler);
-    return () => ipcRenderer.off('disconnect', handler);
+  uninstallPlugin: (pluginId) =>
+    ipcRenderer.invoke('uninstall-plugin', pluginId),
+
+  onPluginUninstalled(callback) {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on("plugins-uninstalled", handler);
+    return () => ipcRenderer.off("plugins-uninstalled", handler);
   },
 
-  onSetSession(callback) {
-    const handler = (_evt, sessionId) => callback?.(sessionId);
-    ipcRenderer.on('setSession', handler);
-    return () => ipcRenderer.off('setSession', handler);
+  // -------- Host bridge APIs (for plugin sandbox) --------
+  host: {
+    file: {
+      readText(resourceId, pluginId) {
+        return ipcRenderer.invoke("bridge:file.readText", {
+          pluginId,
+          resourceId
+        });
+      },
+      readJson(resourceId, pluginId) {
+        return ipcRenderer.invoke("bridge:file.readJson", {
+          pluginId,
+          resourceId
+        });
+      }
+    },
+
+    dolphin: {
+      subscribe(pluginId, options) {
+        return ipcRenderer.invoke("bridge:dolphin.subscribe", {
+          pluginId,
+          ...options
+        });
+      }
+    }
+  },
+
+  // -------- Event fanout --------
+  on(event, callback) {
+    const handler = (_evt, payload) => callback(payload);
+    ipcRenderer.on(event, handler);
+    return () => ipcRenderer.off(event, handler);
   }
 };
 
 // Preferred namespace
 contextBridge.exposeInMainWorld('salt', api);
-
-// Back-compat for existing code that calls window.electronAPI.*
-contextBridge.exposeInMainWorld('electronAPI', api);
