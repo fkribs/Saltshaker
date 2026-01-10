@@ -1,6 +1,5 @@
 // main.js
 const { app, ipcMain } = require('electron');
-const path = require('path');
 const log = require('electron-log');
 
 const WindowManager = require('./WindowManager');
@@ -33,7 +32,9 @@ app.setAppUserModelId('com.fkribs.saltshaker');
 let windowManager;
 let updateManager;
 let pluginManager;
+
 const pluginEvents = new EventEmitter();
+let _pluginEventsWiredToRenderer = false;
 
 // -------------------- Helpers --------------------
 function createMainWindow() {
@@ -61,6 +62,49 @@ function setupManagers() {
   } else {
     pluginManager = new PluginManager(windowManager, pluginEvents);
   }
+}
+
+/**
+ * Relays main-process pluginEvents -> renderer IPC channels so
+ * preload's `salt.on(event, ...)` can receive them.
+ *
+ * IMPORTANT:
+ * - Wire once (avoid duplicate sends).
+ * - Explicit whitelist.
+ * - Include the events your plugin actually emits today.
+ */
+function wirePluginEventsToRenderer() {
+  if (_pluginEventsWiredToRenderer) return;
+  _pluginEventsWiredToRenderer = true;
+
+  // These should match the strings emitted by plugins and/or bridges:
+  // - Your SSBM plugin emits: "game-start", "game-end", "setSession"
+  // - Your dolphin bridge emits: "dolphin:GameStart", "dolphin:GameEnd"
+  const channels = [
+    'game-start',
+    'game-end',
+    'setSession',
+    'dolphin:GameStart',
+    'dolphin:GameEnd',
+
+    // keep these too if anything else uses them
+    'connect',
+    'disconnect',
+    'set-session'
+  ];
+
+  for (const ch of channels) {
+    pluginEvents.on(ch, (payload) => {
+      const wc = windowManager?.getWebContents?.();
+      if (wc && !wc.isDestroyed()) {
+        wc.send(ch, payload);
+      } else {
+        log.warn(`[pluginEvents->renderer] Dropped '${ch}' event; renderer not ready`);
+      }
+    });
+  }
+
+  log.info(`[pluginEvents->renderer] Wired: ${channels.join(', ')}`);
 }
 
 // -------------------- IPC --------------------
@@ -126,7 +170,13 @@ function setupProcessGuards() {
 // -------------------- App lifecycle --------------------
 app.whenReady().then(() => {
   setupProcessGuards();
+
+  // Create the renderer first so wc.send() has a target.
   createMainWindow();
+
+  // Wire plugin bus -> renderer IPC once.
+  wirePluginEventsToRenderer();
+
   setupManagers();
   setupIpcMainListeners();
 
@@ -140,6 +190,10 @@ app.whenReady().then(() => {
 app.on('activate', () => {
   if (!windowManager?.window) {
     createMainWindow();
+
+    // Ensure wiring exists for the new window as well.
+    wirePluginEventsToRenderer();
+
     setupManagers();
   }
 });

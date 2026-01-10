@@ -42,16 +42,19 @@ class PluginManager {
     const candidates = ["plugin.js", "index.js", "main.js"];
     for (const name of candidates) {
       const full = path.join(distPath, name);
-      try { await fs.access(full); return name; } catch (_) { }
+      try {
+        await fs.access(full);
+        return name;
+      } catch (_) {}
     }
 
     const files = await fs.readdir(distPath);
-    const js = files.find(f => f.endsWith(".js"));
+    const js = files.find((f) => f.endsWith(".js"));
     if (js) return js;
 
     throw new Error(`No JS entrypoint found inside ${distPath}`);
   }
-
+  
   async hydrateInstalledPluginContexts() {
     if (this._contextsHydrated) return;
     this._contextsHydrated = true;
@@ -129,7 +132,7 @@ class PluginManager {
     const context = {
       id,
       permissions,
-      resources: Object.fromEntries(resources.map(r => [r.id, r]))
+      resources: Object.fromEntries(resources.map((r) => [r.id, r]))
     };
 
     await fs.writeFile(
@@ -137,27 +140,23 @@ class PluginManager {
       JSON.stringify(context, null, 2)
     );
 
-    // keep in-memory map hot for current session
     this.installedPluginContexts.set(id, context);
 
     log.info(`Plugin ${id} installed at ${pluginFolder}`);
 
-    // IMPORTANT: match preload listener (see section 4)
     this.getWebContents()?.send("plugins-installed", metadata);
 
     return { ok: true, path: pluginFolder };
   }
 
   async getInstalledPluginContext(pluginId) {
-    // Ensure contexts loaded after restart
     await this.hydrateInstalledPluginContexts();
 
-    // If still missing, attempt direct disk read (covers edge cases)
     if (!this.installedPluginContexts.has(pluginId)) {
       try {
         const ctx = await this.readPluginContextFromDisk(pluginId);
         this.installedPluginContexts.set(pluginId, ctx);
-      } catch { }
+      } catch {}
     }
 
     return this.installedPluginContexts.get(pluginId);
@@ -191,22 +190,21 @@ class PluginManager {
   async uninstallPlugin(pluginId) {
     await this.ensurePluginDir();
 
-    // dispose if active
     const active = this.activePlugins.get(pluginId);
     if (active && typeof active.onDispose === "function") {
-      try { await active.onDispose(); } catch (e) {
+      try {
+        await active.onDispose();
+      } catch (e) {
         log.warn(`Plugin ${pluginId} onDispose failed`, e);
       }
     }
     this.activePlugins.delete(pluginId);
 
-    // remove on-disk folder
     const safeId = this.sanitizeId(pluginId);
     const pluginFolder = path.join(this.pluginsDir, safeId);
 
     await fs.rm(pluginFolder, { recursive: true, force: true });
 
-    // remove in-memory context
     this.installedPluginContexts.delete(pluginId);
 
     log.info(`Plugin ${pluginId} uninstalled`);
@@ -237,7 +235,6 @@ class PluginManager {
     return this.loadAndRunPlugin(pluginId, code, metadata);
   }
 
-  // ... loadAndRunPlugin unchanged ...
   // -------------------------------------------
   // Sandbox Execution
   // -------------------------------------------
@@ -248,7 +245,6 @@ class PluginManager {
       metadata = { id: pluginId, name: pluginId };
     }
 
-    // Ensure debuggability in DevTools
     if (!/\/\/#\s*sourceURL=/.test(pluginCode)) {
       pluginCode += `\n//# sourceURL=${pluginId}.js\n`;
     }
@@ -258,9 +254,6 @@ class PluginManager {
       throw new Error("Renderer not ready");
     }
 
-    // ----------------------------
-    // Safe API exposed to plugin
-    // ----------------------------
     const sandboxApi = {
       log: (...args) => log.info(`[plugin:${pluginId}]`, ...args),
 
@@ -273,13 +266,13 @@ class PluginManager {
         this.pluginEvents.on(event, listener);
         return () => this.pluginEvents.off(event, listener);
       },
+
       host: {
         file: {
           readText: (resourceId) =>
             wc.executeJavaScript(
               `window.salt.host.file.readText(${JSON.stringify(resourceId)}, ${JSON.stringify(pluginId)})`
             ),
-
           readJson: (resourceId) =>
             wc.executeJavaScript(
               `window.salt.host.file.readJson(${JSON.stringify(resourceId)}, ${JSON.stringify(pluginId)})`
@@ -295,9 +288,6 @@ class PluginManager {
       }
     };
 
-    // ----------------------------
-    // VM sandbox
-    // ----------------------------
     const context = {
       module: { exports: {} },
       exports: {},
