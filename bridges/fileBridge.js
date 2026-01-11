@@ -38,47 +38,69 @@ async function readFileLimited(fullPath, maxBytes = 64 * 1024) {
   return buf.toString("utf8");
 }
 
+async function authorizeAndResolve({ getPluginContext, pluginId, resourceId, requireJson }) {
+  const ctx = await getPluginContext(pluginId);
+  if (!ctx) throw new Error(`Unknown plugin: ${pluginId}`);
+
+  if (!ctx.permissions?.includes("file.read")) {
+    throw new Error("Denied: missing permission file.read");
+  }
+
+  const resource = ctx.resources?.[resourceId];
+  if (!resource) throw new Error(`Unknown resource: ${resourceId}`);
+
+  if (requireJson && resource.type !== "json") {
+    throw new Error("Denied: resource is not json");
+  }
+
+  const fullPath = resolveResourcePath(resource);
+  return { fullPath, resource };
+}
+
 /**
- * Registers file bridge handlers.
+ * Registers file bridge handlers and returns a direct-call API surface.
  *
  * @param {object} deps
- * @param {Electron.IpcMain} deps.ipcMain
+ * @param {Electron.IpcMain} [deps.ipcMain]
  * @param {function} deps.getPluginContext
  */
 function registerFileBridge({ ipcMain, getPluginContext }) {
-  ipcMain.handle("bridge:file.readText", async (_evt, { pluginId, resourceId }) => {
-    const ctx = await getPluginContext(pluginId);
-    if (!ctx) throw new Error(`Unknown plugin: ${pluginId}`);
+  // Direct-call API (main-process consumers like PluginManager)
+  const api = {
+    async readText(pluginId, resourceId) {
+      const { fullPath } = await authorizeAndResolve({
+        getPluginContext,
+        pluginId,
+        resourceId,
+        requireJson: false
+      });
+      return await readFileLimited(fullPath);
+    },
 
-    if (!ctx.permissions?.includes("file.read")) {
-      throw new Error("Denied: missing permission file.read");
+    async readJson(pluginId, resourceId) {
+      const { fullPath } = await authorizeAndResolve({
+        getPluginContext,
+        pluginId,
+        resourceId,
+        requireJson: true
+      });
+      const text = await readFileLimited(fullPath);
+      return JSON.parse(text);
     }
+  };
 
-    const resource = ctx.resources?.[resourceId];
-    if (!resource) throw new Error(`Unknown resource: ${resourceId}`);
+  // Optional: IPC compatibility for renderer callers
+  if (ipcMain) {
+    ipcMain.handle("bridge:file.readText", async (_evt, { pluginId, resourceId }) => {
+      return api.readText(pluginId, resourceId);
+    });
 
-    const fullPath = resolveResourcePath(resource);
-    return await readFileLimited(fullPath);
-  });
+    ipcMain.handle("bridge:file.readJson", async (_evt, { pluginId, resourceId }) => {
+      return api.readJson(pluginId, resourceId);
+    });
+  }
 
-  ipcMain.handle("bridge:file.readJson", async (_evt, { pluginId, resourceId }) => {
-    const ctx = await getPluginContext(pluginId);
-    if (!ctx) throw new Error(`Unknown plugin: ${pluginId}`);
-
-    if (!ctx.permissions?.includes("file.read")) {
-      throw new Error("Denied: missing permission file.read");
-    }
-
-    const resource = ctx.resources?.[resourceId];
-    if (!resource) throw new Error(`Unknown resource: ${resourceId}`);
-    if (resource.type !== "json") {
-      throw new Error("Denied: resource is not json");
-    }
-
-    const fullPath = resolveResourcePath(resource);
-    const text = await readFileLimited(fullPath);
-    return JSON.parse(text);
-  });
+  return api;
 }
 
 module.exports = registerFileBridge;

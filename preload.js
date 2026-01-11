@@ -1,84 +1,62 @@
 // preload.js
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require("electron");
 
-// -------------------- Identity --------------------
-const username =
-  process.env.SS_USERNAME ||
-  process.env.USERNAME ||
-  process.env.USER ||
-  'anonymous';
+// Only allow renderer to listen to these channels.
+// (These are forwarded from main via pluginEvents -> wc.send(...).)
+const ALLOWED_CHANNELS = new Set([
+  "connect",
+  "disconnect",
+  "dolphin:Connected",
+  "dolphin:Connecting",
+  "dolphin:Disconnected",
+  "dolphin:Error",
+  "dolphin:GameStart",
+  "dolphin:GameEnd",
+  "plugins-installed",
+  "plugins-uninstalled"
+]);
 
-contextBridge.exposeInMainWorld('username', username);
+function onAllowed(channel, callback) {
+  if (!ALLOWED_CHANNELS.has(channel)) {
+    throw new Error(`Denied: cannot listen on channel '${channel}'`);
+  }
 
-// -------------------- Salt API --------------------
+  const handler = (_evt, payload) => callback(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.off(channel, handler);
+}
+
 const salt = {
-  // -------- Plugin lifecycle --------
-  loadPlugin(pluginId, pluginCode) {
-    ipcRenderer.send('load-plugin', { pluginId, pluginCode });
-  },
-
+  // -------- Plugin lifecycle (UI) --------
   runInstalledPlugin(pluginId) {
-    return ipcRenderer.invoke('run-plugin', pluginId);
+    return ipcRenderer.invoke("run-plugin", pluginId);
   },
 
   getInstalledPlugins() {
-    return ipcRenderer.invoke('list-installed-plugins');
+    return ipcRenderer.invoke("list-installed-plugins");
   },
 
   installPlugin(payload) {
-    return ipcRenderer.invoke('install-plugin', payload);
+    return ipcRenderer.invoke("install-plugin", payload);
   },
 
   uninstallPlugin(pluginId) {
-    return ipcRenderer.invoke('uninstall-plugin', pluginId);
+    return ipcRenderer.invoke("uninstall-plugin", pluginId);
   },
 
   onPluginInstalled(callback) {
-    const handler = (_e, info) => callback(info);
-    ipcRenderer.on('plugins-installed', handler);
-    return () => ipcRenderer.off('plugins-installed', handler);
+    return onAllowed("plugins-installed", callback);
   },
 
   onPluginUninstalled(callback) {
-    const handler = (_e, info) => callback(info);
-    ipcRenderer.on('plugins-uninstalled', handler);
-    return () => ipcRenderer.off('plugins-uninstalled', handler);
+    return onAllowed("plugins-uninstalled", callback);
   },
 
-  // -------- Host bridge APIs (for plugin sandbox) --------
-  host: {
-    file: {
-      readText(resourceId, pluginId) {
-        return ipcRenderer.invoke('bridge:file.readText', {
-          pluginId,
-          resourceId
-        });
-      },
-      readJson(resourceId, pluginId) {
-        return ipcRenderer.invoke('bridge:file.readJson', {
-          pluginId,
-          resourceId
-        });
-      }
-    },
-
-    dolphin: {
-      subscribe(pluginId, options) {
-        return ipcRenderer.invoke('bridge:dolphin.subscribe', {
-          pluginId,
-          ...options
-        });
-      }
-    }
-  },
-
-  // -------- Event fanout (connect / disconnect / set-session) --------
+  // -------- Event fanout (UI) --------
+  // This is for renderer UI to react to plugin/bridge events.
   on(event, callback) {
-    const handler = (_evt, payload) => callback(payload);
-    ipcRenderer.on(event, handler);
-    return () => ipcRenderer.off(event, handler);
+    return onAllowed(event, callback);
   }
 };
 
-// Preferred namespace
-contextBridge.exposeInMainWorld('salt', salt);
+contextBridge.exposeInMainWorld("salt", salt);

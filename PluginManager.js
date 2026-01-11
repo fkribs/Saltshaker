@@ -18,6 +18,20 @@ class PluginManager {
 
     this.activePlugins = new Map();
     this.pluginsDir = path.join(app.getPath("userData"), "plugins");
+
+    // Direct-call bridge surfaces (injected from main.js)
+    this.fileBridge = null;
+    this.dolphinBridge = null;
+
+    this._contextsHydrated = false;
+  }
+
+  // -------------------------------------------
+  // Bridge injection
+  // -------------------------------------------
+  setHostBridges({ fileBridge, dolphinBridge }) {
+    this.fileBridge = fileBridge;
+    this.dolphinBridge = dolphinBridge;
   }
 
   // -------------------------------------------
@@ -54,7 +68,7 @@ class PluginManager {
 
     throw new Error(`No JS entrypoint found inside ${distPath}`);
   }
-  
+
   async hydrateInstalledPluginContexts() {
     if (this._contextsHydrated) return;
     this._contextsHydrated = true;
@@ -241,49 +255,65 @@ class PluginManager {
   loadAndRunPlugin(pluginId, pluginCode, metadata = null) {
     log.info(`Activating plugin: ${pluginId}`);
 
-    if (!metadata) {
-      metadata = { id: pluginId, name: pluginId };
+    if (!metadata) metadata = { id: pluginId, name: pluginId };
+
+    if (!this.fileBridge || !this.dolphinBridge) {
+      throw new Error("Host bridges not configured. Call pluginManager.setHostBridges(...) first.");
     }
 
     if (!/\/\/#\s*sourceURL=/.test(pluginCode)) {
       pluginCode += `\n//# sourceURL=${pluginId}.js\n`;
     }
 
+    // Renderer is no longer used as a bridge hop, but we still need it for UI notifications.
+    // Keep the guard to match your existing lifecycle expectations.
     const wc = this.getWebContents();
-    if (!wc) {
-      throw new Error("Renderer not ready");
-    }
+    if (!wc) throw new Error("Renderer not ready");
+
+    const disposers = [];
+    const dolphinSubscriptions = new Set();
+
+    let disposing = false;
+    let disposed = false;
 
     const sandboxApi = {
       log: (...args) => log.info(`[plugin:${pluginId}]`, ...args),
 
-      sendEvent: (event, payload) => {
-        this.pluginEvents.emit(event, payload);
+      // Variadic: supports connect(roomCode, uid), etc.
+      sendEvent: (event, ...args) => {
+        if (disposing && event !== "disconnect") return;
+        this.pluginEvents.emit(event, ...args);
       },
 
       on: (event, handler) => {
-        const listener = (payload) => handler(payload);
+        const listener = (...args) => {
+          if (disposing) return;
+          handler(...args);
+        };
+
         this.pluginEvents.on(event, listener);
-        return () => this.pluginEvents.off(event, listener);
+
+        const dispose = () => this.pluginEvents.off(event, listener);
+        disposers.push(dispose);
+        return dispose;
       },
 
       host: {
         file: {
-          readText: (resourceId) =>
-            wc.executeJavaScript(
-              `window.salt.host.file.readText(${JSON.stringify(resourceId)}, ${JSON.stringify(pluginId)})`
-            ),
-          readJson: (resourceId) =>
-            wc.executeJavaScript(
-              `window.salt.host.file.readJson(${JSON.stringify(resourceId)}, ${JSON.stringify(pluginId)})`
-            )
+          readText: (resourceId) => this.fileBridge.readText(pluginId, resourceId),
+          readJson: (resourceId) => this.fileBridge.readJson(pluginId, resourceId)
         },
 
         dolphin: {
-          subscribe: (options) =>
-            wc.executeJavaScript(
-              `window.salt.host.dolphin.subscribe(${JSON.stringify(pluginId)}, ${JSON.stringify(options)})`
-            )
+          subscribe: async (options) => {
+            for (const ev of (options?.events || [])) dolphinSubscriptions.add(ev);
+            return this.dolphinBridge.subscribe(pluginId, options);
+          },
+
+          unsubscribe: async (options) => {
+            for (const ev of (options?.events || [])) dolphinSubscriptions.delete(ev);
+            return this.dolphinBridge.unsubscribe(pluginId, options);
+          }
         }
       }
     };
@@ -294,7 +324,6 @@ class PluginManager {
       api: sandboxApi,
       plugin: metadata
     };
-
     context.global = context;
 
     const vmContext = vm.createContext(context);
@@ -308,12 +337,63 @@ class PluginManager {
       script.runInContext(vmContext, { displayErrors: true });
 
       const pluginExport = context.module.exports;
-      if (pluginExport && typeof pluginExport.onInit === "function") {
-        this.activePlugins.set(pluginId, pluginExport);
-        pluginExport.onInit(sandboxApi);
+
+      if (!pluginExport || typeof pluginExport.onInit !== "function") {
+        log.warn(`Plugin ${pluginId} has no onInit export; skipping activation`);
+        return;
       }
 
-      log.info(`Plugin ${pluginId} activated`);
+      const activeEntry = {
+        pluginExport,
+        onDispose: async () => {
+          if (disposed || disposing) return;
+          disposing = true;
+
+          // 1) Stop upstream sources first (dolphin)
+          try {
+            if (dolphinSubscriptions.size) {
+              await sandboxApi.host.dolphin.unsubscribe({ events: [...dolphinSubscriptions] });
+            }
+          } catch (e) {
+            log.warn(`Plugin ${pluginId} dolphin.unsubscribe failed`, e);
+          }
+
+          // 2) Remove all listeners registered via api.on
+          try {
+            for (const d of disposers.splice(0)) {
+              try {
+                d();
+              } catch (e) {
+                log.warn(`Plugin ${pluginId} disposer failed`, e);
+              }
+            }
+          } finally {
+            // 3) Give plugin a chance to clean up / emit disconnect
+            try {
+              if (typeof pluginExport.onDispose === "function") {
+                await pluginExport.onDispose();
+              }
+            } catch (e) {
+              log.warn(`Plugin ${pluginId} onDispose failed`, e);
+            }
+
+            // 4) Drop references to allow GC
+            activeEntry.pluginExport = null;
+            disposed = true;
+          }
+        }
+      };
+
+      this.activePlugins.set(pluginId, activeEntry);
+
+      // Run init; on failure, auto-dispose to avoid leaks
+      Promise.resolve(pluginExport.onInit(sandboxApi))
+        .then(() => log.info(`Plugin ${pluginId} activated`))
+        .catch((err) => {
+          log.error(`Plugin ${pluginId} onInit failed`, err);
+          const active = this.activePlugins.get(pluginId);
+          active?.onDispose?.().catch((e) => log.warn("dispose after init failure failed", e));
+        });
     } catch (err) {
       log.error(`Plugin ${pluginId} failed to activate`, err);
     }
